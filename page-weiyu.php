@@ -10,16 +10,19 @@
 // 加载WordPress头部
 get_header();
 
+// 获取自定义页面标题
+$custom_title = weiyu_get_page_title();
+
 // 获取管理员信息（头像和昵称）
 $admin_info = weiyu_get_admin_info();
 
 // 获取当前页码，默认第1页
 $current_page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
 
-// 每页显示的微语数量（最多6条）
+// 每页显示的数量（最多6条）
 $per_page = 6;
 
-// 获取微语列表数据
+// 获取列表数据
 $weiyu_data = (new WP_Weiyu_Plugin())->get_weiyu_list($current_page, $per_page);
 $weiyu_list = $weiyu_data['list'];
 $total_pages = $weiyu_data['total_pages'];
@@ -30,7 +33,7 @@ $page_title = get_the_title();
 
 ?>
 
-<!-- 微语页面主体内容区域 -->
+<!-- 页面主体内容区域 -->
 <div id="weiyu-container" class="weiyu-container">
     
     <!-- 页面标题区域 -->
@@ -43,13 +46,29 @@ $page_title = get_the_title();
         // 增加浏览量（打开页面一次就+1）
         update_option('weiyu_page_views', $view_count + 1);
         ?>
-        <p class="weiyu-stats" data-view-count="<?php echo esc_attr($view_count); ?>">共 <?php echo esc_html($view_count); ?> 次浏览 | 共 <?php echo esc_html($total); ?> 条微语</p>
+        <p class="weiyu-stats" data-view-count="<?php echo esc_attr($view_count); ?>">共 <?php echo esc_html($view_count); ?> 次浏览 | 共 <?php echo esc_html($total); ?> 条<?php echo esc_html($custom_title); ?></p>
         <?php 
         // 隐藏的总页数元素，供JavaScript使用
         if ($total_pages > 1) : ?>
             <div class="weiyu-total-pages" data-total-pages="<?php echo esc_attr($total_pages); ?>" style="display:none;"></div>
         <?php endif; ?>
     </div>
+
+    <?php 
+        // 如果管理员已登录，显示发布表单
+        if (current_user_can('manage_options')) : 
+        ?>
+        <!-- 前台发布表单（仅管理员可见） -->
+        <div class="weiyu-post-form">
+            <h3>发布新<?php echo esc_html($custom_title); ?></h3>
+            <form id="weiyu-frontend-form" method="post">
+                <?php wp_nonce_field('weiyu_frontend_post', 'weiyu_frontend_nonce'); ?>
+                <textarea id="weiyu-content-input" name="weiyu_content" placeholder="写下你想说的话..." rows="4" required></textarea>
+                <button type="submit" id="weiyu-submit-btn" class="weiyu-submit-btn">发布<?php echo esc_html($custom_title); ?></button>
+            </form>
+            <div id="weiyu-post-message" class="weiyu-post-message"></div>
+        </div>
+        <?php endif; ?>
 
     <!-- 微语列表区域 -->
     <div class="weiyu-list">
@@ -86,7 +105,7 @@ $page_title = get_the_title();
         <?php else : ?>
             <!-- 空数据提示 -->
             <div class="weiyu-empty">
-                <p><?php _e('暂无微语，敬请期待', 'wp-weiyu-plugin'); ?></p>
+                <p>暂无<?php echo esc_html($custom_title); ?>，敬请期待</p>
             </div>
         <?php endif; ?>
         

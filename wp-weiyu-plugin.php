@@ -12,7 +12,7 @@
  * Plugin Name: WP微语插件
  * Plugin URI:  https://example.com/wp-weiyu-plugin
  * Description: 轻量化个人微语/碎碎念发布插件，支持后台独立发布微语，前台专属页面优雅展示所有微语内容。
- * Version:     1.0.0
+ * Version:     1.1
  * Author:      Tinsur
  * Author URI:  https://tinsur.cn
  * Text Domain: wp-weiyu-plugin
@@ -65,6 +65,10 @@ class WP_Weiyu_Plugin {
         // 注册AJAX端点
         add_action('wp_ajax_weiyu_load_page', array($this, 'ajax_load_page'));
         add_action('wp_ajax_nopriv_weiyu_load_page', array($this, 'ajax_load_page'));
+        
+        // 注册前台发布微语AJAX端点
+        add_action('wp_ajax_weiyu_frontend_post', array($this, 'ajax_frontend_post'));
+        add_action('wp_ajax_nopriv_weiyu_frontend_post', array($this, 'ajax_frontend_post'));
         
         // 注册表单处理钩子（使用admin_post方式，确保能正常重定向）
         add_action('admin_post_weiyu_save', array($this, 'handle_save_weiyu'));
@@ -260,7 +264,7 @@ class WP_Weiyu_Plugin {
             </form>
             <?php else : ?>
             <div class="notice notice-info">
-                <p>暂无微语，点击上方"添加新微语"按钮发布第一条微语。</p>
+                <p>暂无微语，点击上方"发布新微语"按钮发布第一条微语。</p>
             </div>
             <?php endif; ?>
         </div>
@@ -562,7 +566,9 @@ class WP_Weiyu_Plugin {
                 wp_localize_script('weiyu-script', 'weiyu_ajax', array(
                     'ajax_url' => admin_url('admin-ajax.php'),
                     'nonce' => wp_create_nonce('weiyu_load_page'),
-                    'nickname' => $admin_info['nickname']
+                    'frontend_nonce' => wp_create_nonce('weiyu_frontend_post'),
+                    'nickname' => $admin_info['nickname'],
+                    'page_title' => weiyu_get_page_title()
                 ));
             }
         }
@@ -613,6 +619,78 @@ class WP_Weiyu_Plugin {
     }
     
     /**
+     * AJAX前台发布微语
+     */
+    public function ajax_frontend_post() {
+        // 验证权限
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('您没有权限执行此操作。');
+        }
+        
+        // 验证nonce防止CSRF攻击
+        if (!isset($_POST['security']) || !wp_verify_nonce($_POST['security'], 'weiyu_frontend_post')) {
+            wp_send_json_error('非法操作，请求已被拒绝。');
+        }
+        
+        // 获取内容
+        $content = isset($_POST['content']) ? trim(sanitize_textarea_field($_POST['content'])) : '';
+        
+        // 获取自定义页面标题
+        $page_title = weiyu_get_page_title();
+        
+        // 验证内容
+        if (empty($content)) {
+            wp_send_json_error($page_title . '内容不能为空。');
+        }
+        
+        // 获取当前北京时间作为发布时间
+        date_default_timezone_set('Asia/Shanghai');
+        $created_at = date('Y-m-d H:i:s');
+        
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'weiyu_posts';
+        
+        // 插入数据
+        $result = $wpdb->insert(
+            $table_name,
+            array(
+                'content' => $content,
+                'created_at' => $created_at
+            ),
+            array(
+                '%s',
+                '%s'
+            )
+        );
+        
+        if ($result) {
+            $new_weiyu_id = $wpdb->insert_id;
+            
+            // 获取自定义页面标题
+            $page_title = weiyu_get_page_title();
+            
+            // 获取管理员信息
+            $admin_info = weiyu_get_admin_info();
+            
+            // 获取格式化的时间显示
+            $formatted_time = date('Y年m月d日 H:i', strtotime($created_at));
+            
+            wp_send_json_success(array(
+                'message' => $page_title . '发布成功！',
+                'weiyu' => array(
+                    'id' => $new_weiyu_id,
+                    'content' => nl2br(esc_html($content)),
+                    'created_at' => $created_at,
+                    'formatted_time' => $formatted_time,
+                    'nickname' => $admin_info['nickname']
+                )
+            ));
+        } else {
+            wp_send_json_error('发布失败，请重试。');
+        }
+    }
+    
+    /**
      * 构建分页HTML
      *
      * @param int $current_page 当前页码
@@ -626,11 +704,9 @@ class WP_Weiyu_Plugin {
         
         $html = '<ul>';
         
-        // 上一页
+        // 上一页（与paginate_links保持一致，第一页不显示上一页按钮）
         if ($current_page > 1) {
             $html .= '<li><a href="?paged=' . ($current_page - 1) . '">&laquo;</a></li>';
-        } else {
-            $html .= '<li><span class="page-numbers">&laquo;</span></li>';
         }
         
         // 页码列表
@@ -642,11 +718,9 @@ class WP_Weiyu_Plugin {
             }
         }
         
-        // 下一页
+        // 下一页（与paginate_links保持一致，最后一页不显示下一页按钮）
         if ($current_page < $total_pages) {
             $html .= '<li><a href="?paged=' . ($current_page + 1) . '">&raquo;</a></li>';
-        } else {
-            $html .= '<li><span class="page-numbers">&raquo;</span></li>';
         }
         
         $html .= '</ul>';
@@ -695,6 +769,15 @@ class WP_Weiyu_Plugin {
 
 // 实例化插件主类
 new WP_Weiyu_Plugin();
+
+/**
+ * 获取微语页面标题（支持自定义）
+ *
+ * @return string 页面标题
+ */
+function weiyu_get_page_title() {
+    return get_option('weiyu_page_title', '微语');
+}
 
 /**
  * 获取网站管理员信息
