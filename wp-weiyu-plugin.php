@@ -12,7 +12,7 @@
  * Plugin Name: WP微语插件
  * Plugin URI:  https://example.com/wp-weiyu-plugin
  * Description: 轻量化个人微语/碎碎念发布插件，支持后台独立发布微语，前台专属页面优雅展示所有微语内容。
- * Version:     1.1
+ * Version:     1.2
  * Author:      Tinsur
  * Author URI:  https://tinsur.cn
  * Text Domain: wp-weiyu-plugin
@@ -174,7 +174,7 @@ class WP_Weiyu_Plugin {
                 wp_die(__('非法操作，请求已被拒绝。'));
             }
             $this->delete_weiyu($id);
-            wp_redirect(admin_url('admin.php?page=weiyu-manager'));
+            wp_redirect(admin_url('admin.php?page=weiyu-manager&message=deleted'));
             exit;
         }
         
@@ -188,7 +188,7 @@ class WP_Weiyu_Plugin {
             foreach ($weiyu_ids as $weiyu_id) {
                 $this->delete_weiyu($weiyu_id);
             }
-            wp_redirect(admin_url('admin.php?page=weiyu-manager'));
+            wp_redirect(admin_url('admin.php?page=weiyu-manager&message=deleted'));
             exit;
         }
         
@@ -217,6 +217,12 @@ class WP_Weiyu_Plugin {
                 ?>
                 <div class="notice notice-success is-dismissible">
                     <p>微语已经更新完成！</p>
+                </div>
+                <?php
+            } elseif (isset($_GET['message']) && $_GET['message'] === 'deleted') {
+                ?>
+                <div class="notice notice-success is-dismissible">
+                    <p>微语已经删除成功！</p>
                 </div>
                 <?php
             }
@@ -366,6 +372,17 @@ class WP_Weiyu_Plugin {
             <h1 class="wp-heading-inline"><?php echo $id > 0 ? '编辑微语' : '添加新微语'; ?></h1>
             <a href="?page=weiyu-manager" class="page-title-action">返回微语列表</a>
             <hr class="wp-header-end">
+            
+            <?php
+            // 显示内容为空的错误提示
+            if (isset($_GET['message']) && $_GET['message'] === 'empty') {
+                ?>
+                <div class="notice notice-error is-dismissible">
+                    <p>微语内容不能为空！</p>
+                </div>
+                <?php
+            }
+            ?>
             
             <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
                 <?php wp_nonce_field('weiyu_save'); ?>
